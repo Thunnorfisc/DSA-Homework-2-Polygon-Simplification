@@ -1,73 +1,92 @@
 #include "spatial_index.h"
 #include <algorithm>
 #include <cmath>
+#include <limits>
 
-int SpatialGrid::cell_x(double x) const
+// ── AABB ──
+
+AABB::AABB(double x1, double y1, double x2, double y2)
 {
-    int c = static_cast<int>((x - min_x) / cell_width);
-    return std::max(0, std::min(c, cols - 1));
+    min_x = std::min(x1, x2);
+    min_y = std::min(y1, y2);
+    max_x = std::max(x1, x2);
+    max_y = std::max(y1, y2);
 }
 
-int SpatialGrid::cell_y(double y) const
+double AABB::area() const
 {
-    int r = static_cast<int>((y - min_y) / cell_height);
-    return std::max(0, std::min(r, rows - 1));
+    if (max_x < min_x || max_y < min_y) return 0.0;
+    return (max_x - min_x) * (max_y - min_y);
 }
 
-void SpatialGrid::get_cells(double x1, double y1, double x2, double y2,
-                            int& c0, int& r0, int& c1, int& r1) const
+double AABB::enlargement(const AABB& other) const
 {
-    // Ensure x1 <= x2, y1 <= y2
-    if (x1 > x2) std::swap(x1, x2);
-    if (y1 > y2) std::swap(y1, y2);
+    double new_min_x = std::min(min_x, other.min_x);
+    double new_min_y = std::min(min_y, other.min_y);
+    double new_max_x = std::max(max_x, other.max_x);
+    double new_max_y = std::max(max_y, other.max_y);
+    double new_area = (new_max_x - new_min_x) * (new_max_y - new_min_y);
+    return new_area - area();
+}
 
-    c0 = cell_x(x1);
-    r0 = cell_y(y1);
-    c1 = cell_x(x2);
-    r1 = cell_y(y2);
+void AABB::expand(const AABB& other)
+{
+    min_x = std::min(min_x, other.min_x);
+    min_y = std::min(min_y, other.min_y);
+    max_x = std::max(max_x, other.max_x);
+    max_y = std::max(max_y, other.max_y);
+}
+
+bool AABB::overlaps(const AABB& other) const
+{
+    return !(max_x < other.min_x || min_x > other.max_x ||
+             max_y < other.min_y || min_y > other.max_y);
+}
+
+AABB AABB::from_segment(Node* a, Node* b)
+{
+    return AABB(a->x, a->y, b->x, b->y);
+}
+
+// ── RTreeNode ──
+
+RTreeNode::~RTreeNode()
+{
+    if (!is_leaf) {
+        for (auto* child : children) {
+            delete child;
+        }
+    }
+}
+
+void RTreeNode::recompute_bbox()
+{
+    bbox = AABB(); // reset to empty
+    if (is_leaf) {
+        for (const auto& box : entry_boxes) {
+            bbox.expand(box);
+        }
+    } else {
+        for (auto* child : children) {
+            bbox.expand(child->bbox);
+        }
+    }
+}
+
+// ── SpatialGrid (R-tree) ──
+
+SpatialGrid::~SpatialGrid()
+{
+    delete root;
 }
 
 void SpatialGrid::build(const std::vector<Ring>& rings)
 {
-    // Compute bounding box of all vertices
-    min_x = 1e18;  min_y = 1e18;
-    max_x = -1e18; max_y = -1e18;
+    delete root;
+    root = new RTreeNode(true); // start with empty leaf
 
-    int total_segments = 0;
     for (const auto& ring : rings) {
-        Node* cur = ring.vertices.head;
-        do {
-            min_x = std::min(min_x, cur->x);
-            min_y = std::min(min_y, cur->y);
-            max_x = std::max(max_x, cur->x);
-            max_y = std::max(max_y, cur->y);
-            total_segments++;
-            cur = cur->next;
-        } while (cur != ring.vertices.head);
-    }
-
-    // Add small padding to avoid edge cases
-    double pad = 1.0;
-    min_x -= pad; min_y -= pad;
-    max_x += pad; max_y += pad;
-
-    // Grid size: roughly sqrt(n) x sqrt(n) cells
-    int grid_size = std::max(1, static_cast<int>(std::sqrt(total_segments)));
-    cols = grid_size;
-    rows = grid_size;
-
-    cell_width = (max_x - min_x) / cols;
-    cell_height = (max_y - min_y) / rows;
-
-    // Avoid zero-size cells
-    if (cell_width < 1e-12) cell_width = 1.0;
-    if (cell_height < 1e-12) cell_height = 1.0;
-
-    cells.clear();
-    cells.resize(cols * rows);
-
-    // Insert all segments
-    for (const auto& ring : rings) {
+        if (ring.vertices.size < 2) continue;
         Node* cur = ring.vertices.head;
         do {
             insert(cur, cur->next);
@@ -76,30 +95,371 @@ void SpatialGrid::build(const std::vector<Ring>& rings)
     }
 }
 
+RTreeNode* SpatialGrid::choose_leaf(RTreeNode* node, const AABB& box)
+{
+    if (node->is_leaf) return node;
+
+    // Pick child whose bbox needs least enlargement
+    double best_enlarge = std::numeric_limits<double>::max();
+    double best_area = std::numeric_limits<double>::max();
+    RTreeNode* best = node->children[0];
+
+    for (auto* child : node->children) {
+        double enlarge = child->bbox.enlargement(box);
+        double a = child->bbox.area();
+        if (enlarge < best_enlarge || (enlarge == best_enlarge && a < best_area)) {
+            best_enlarge = enlarge;
+            best_area = a;
+            best = child;
+        }
+    }
+
+    return choose_leaf(best, box);
+}
+
+// Quadratic split: pick two seeds that waste the most area, then assign
+// remaining entries to the group whose bbox grows least
+RTreeNode* SpatialGrid::split_node(RTreeNode* node)
+{
+    RTreeNode* new_node = new RTreeNode(node->is_leaf);
+
+    if (node->is_leaf) {
+        int n = (int)node->entries.size();
+
+        // Pick seeds: pair with maximum wasted area
+        int seed1 = 0, seed2 = 1;
+        double max_waste = -1e18;
+        for (int i = 0; i < n; i++) {
+            for (int j = i + 1; j < n; j++) {
+                AABB combined = node->entry_boxes[i];
+                combined.expand(node->entry_boxes[j]);
+                double waste = combined.area() - node->entry_boxes[i].area()
+                             - node->entry_boxes[j].area();
+                if (waste > max_waste) {
+                    max_waste = waste;
+                    seed1 = i;
+                    seed2 = j;
+                }
+            }
+        }
+
+        // Group 1 gets seed1, group 2 gets seed2
+        std::vector<Segment> entries1, entries2;
+        std::vector<AABB> boxes1, boxes2;
+
+        entries1.push_back(node->entries[seed1]);
+        boxes1.push_back(node->entry_boxes[seed1]);
+        AABB bbox1 = node->entry_boxes[seed1];
+
+        entries2.push_back(node->entries[seed2]);
+        boxes2.push_back(node->entry_boxes[seed2]);
+        AABB bbox2 = node->entry_boxes[seed2];
+
+        // Assign remaining entries
+        for (int i = 0; i < n; i++) {
+            if (i == seed1 || i == seed2) continue;
+
+            // If one group needs all remaining to reach MIN_ENTRIES, force assign
+            int remaining = n - (int)entries1.size() - (int)entries2.size();
+            if ((int)entries1.size() + remaining <= RTreeNode::MIN_ENTRIES) {
+                entries1.push_back(node->entries[i]);
+                boxes1.push_back(node->entry_boxes[i]);
+                bbox1.expand(node->entry_boxes[i]);
+                continue;
+            }
+            if ((int)entries2.size() + remaining <= RTreeNode::MIN_ENTRIES) {
+                entries2.push_back(node->entries[i]);
+                boxes2.push_back(node->entry_boxes[i]);
+                bbox2.expand(node->entry_boxes[i]);
+                continue;
+            }
+
+            // Assign to group with less enlargement
+            double e1 = bbox1.enlargement(node->entry_boxes[i]);
+            double e2 = bbox2.enlargement(node->entry_boxes[i]);
+            if (e1 < e2 || (e1 == e2 && bbox1.area() <= bbox2.area())) {
+                entries1.push_back(node->entries[i]);
+                boxes1.push_back(node->entry_boxes[i]);
+                bbox1.expand(node->entry_boxes[i]);
+            } else {
+                entries2.push_back(node->entries[i]);
+                boxes2.push_back(node->entry_boxes[i]);
+                bbox2.expand(node->entry_boxes[i]);
+            }
+        }
+
+        node->entries = std::move(entries1);
+        node->entry_boxes = std::move(boxes1);
+        node->bbox = bbox1;
+
+        new_node->entries = std::move(entries2);
+        new_node->entry_boxes = std::move(boxes2);
+        new_node->bbox = bbox2;
+
+    } else {
+        // Internal node split
+        int n = (int)node->children.size();
+
+        int seed1 = 0, seed2 = 1;
+        double max_waste = -1e18;
+        for (int i = 0; i < n; i++) {
+            for (int j = i + 1; j < n; j++) {
+                AABB combined = node->children[i]->bbox;
+                combined.expand(node->children[j]->bbox);
+                double waste = combined.area() - node->children[i]->bbox.area()
+                             - node->children[j]->bbox.area();
+                if (waste > max_waste) {
+                    max_waste = waste;
+                    seed1 = i;
+                    seed2 = j;
+                }
+            }
+        }
+
+        std::vector<RTreeNode*> group1, group2;
+        group1.push_back(node->children[seed1]);
+        AABB bbox1 = node->children[seed1]->bbox;
+        group2.push_back(node->children[seed2]);
+        AABB bbox2 = node->children[seed2]->bbox;
+
+        for (int i = 0; i < n; i++) {
+            if (i == seed1 || i == seed2) continue;
+
+            int remaining = n - (int)group1.size() - (int)group2.size();
+            if ((int)group1.size() + remaining <= RTreeNode::MIN_ENTRIES) {
+                group1.push_back(node->children[i]);
+                bbox1.expand(node->children[i]->bbox);
+                continue;
+            }
+            if ((int)group2.size() + remaining <= RTreeNode::MIN_ENTRIES) {
+                group2.push_back(node->children[i]);
+                bbox2.expand(node->children[i]->bbox);
+                continue;
+            }
+
+            double e1 = bbox1.enlargement(node->children[i]->bbox);
+            double e2 = bbox2.enlargement(node->children[i]->bbox);
+            if (e1 < e2 || (e1 == e2 && bbox1.area() <= bbox2.area())) {
+                group1.push_back(node->children[i]);
+                bbox1.expand(node->children[i]->bbox);
+            } else {
+                group2.push_back(node->children[i]);
+                bbox2.expand(node->children[i]->bbox);
+            }
+        }
+
+        node->children = std::move(group1);
+        node->bbox = bbox1;
+
+        new_node->children = std::move(group2);
+        new_node->bbox = bbox2;
+    }
+
+    return new_node;
+}
+
+void SpatialGrid::handle_overflow(RTreeNode* node, std::vector<RTreeNode*>& path)
+{
+    RTreeNode* new_node = split_node(node);
+
+    if (path.empty()) {
+        // node is root — create new root
+        RTreeNode* new_root = new RTreeNode(false);
+        new_root->children.push_back(node);
+        new_root->children.push_back(new_node);
+        new_root->recompute_bbox();
+        root = new_root;
+    } else {
+        // Add new_node as sibling in parent
+        RTreeNode* parent = path.back();
+        parent->children.push_back(new_node);
+        parent->recompute_bbox();
+
+        if (parent->count() > RTreeNode::MAX_ENTRIES) {
+            path.pop_back();
+            handle_overflow(parent, path);
+        }
+    }
+}
+
 void SpatialGrid::insert(Node* from, Node* to)
 {
+    AABB box = AABB::from_segment(from, to);
     Segment seg{from, to};
 
-    int c0, r0, c1, r1;
-    get_cells(from->x, from->y, to->x, to->y, c0, r0, c1, r1);
+    if (!root) {
+        root = new RTreeNode(true);
+    }
 
-    for (int r = r0; r <= r1; r++) {
-        for (int c = c0; c <= c1; c++) {
-            cells[r * cols + c].insert(seg);
+    // Build path from root to leaf
+    std::vector<RTreeNode*> path;
+    RTreeNode* node = root;
+    while (!node->is_leaf) {
+        path.push_back(node);
+        // Pick child with least enlargement
+        double best_enlarge = std::numeric_limits<double>::max();
+        double best_area = std::numeric_limits<double>::max();
+        RTreeNode* best = node->children[0];
+        for (auto* child : node->children) {
+            double enlarge = child->bbox.enlargement(box);
+            double a = child->bbox.area();
+            if (enlarge < best_enlarge || (enlarge == best_enlarge && a < best_area)) {
+                best_enlarge = enlarge;
+                best_area = a;
+                best = child;
+            }
         }
+        node = best;
+    }
+
+    // Insert into leaf
+    node->entries.push_back(seg);
+    node->entry_boxes.push_back(box);
+    node->bbox.expand(box);
+
+    // Update bboxes along path
+    for (auto* p : path) {
+        p->bbox.expand(box);
+    }
+
+    // Handle overflow
+    if (node->count() > RTreeNode::MAX_ENTRIES) {
+        handle_overflow(node, path);
+    }
+}
+
+RTreeNode* SpatialGrid::find_leaf(RTreeNode* node, const Segment& seg, const AABB& box,
+                                  std::vector<RTreeNode*>& path)
+{
+    if (node->is_leaf) {
+        for (size_t i = 0; i < node->entries.size(); i++) {
+            if (node->entries[i] == seg) {
+                return node;
+            }
+        }
+        return nullptr;
+    }
+
+    for (auto* child : node->children) {
+        if (child->bbox.overlaps(box)) {
+            path.push_back(node);
+            RTreeNode* result = find_leaf(child, seg, box, path);
+            if (result) return result;
+            path.pop_back();
+        }
+    }
+    return nullptr;
+}
+
+void SpatialGrid::condense_tree(std::vector<RTreeNode*>& path)
+{
+    // Collect entries from underflowing nodes to reinsert
+    std::vector<Segment> reinsert_segs;
+    std::vector<AABB> reinsert_boxes;
+
+    while (!path.empty()) {
+        RTreeNode* parent = path.back();
+        path.pop_back();
+
+        // Remove empty or underflowing children
+        std::vector<RTreeNode*> keep;
+        for (auto* child : parent->children) {
+            if (child->count() == 0) {
+                delete child;
+            } else if (child->count() < RTreeNode::MIN_ENTRIES && parent != root) {
+                // Collect entries for reinsertion
+                if (child->is_leaf) {
+                    for (size_t i = 0; i < child->entries.size(); i++) {
+                        reinsert_segs.push_back(child->entries[i]);
+                        reinsert_boxes.push_back(child->entry_boxes[i]);
+                    }
+                }
+                // For internal nodes, collect leaf entries recursively
+                // (simplified: just keep underflowing internal nodes)
+                if (!child->is_leaf) {
+                    keep.push_back(child);
+                } else {
+                    delete child;
+                }
+            } else {
+                keep.push_back(child);
+            }
+        }
+        parent->children = std::move(keep);
+        parent->recompute_bbox();
+    }
+
+    // If root has only one child, make that child the root
+    while (root && !root->is_leaf && root->children.size() == 1) {
+        RTreeNode* old_root = root;
+        root = root->children[0];
+        old_root->children.clear(); // prevent recursive delete
+        delete old_root;
+    }
+
+    // Reinsert collected entries
+    for (size_t i = 0; i < reinsert_segs.size(); i++) {
+        insert(reinsert_segs[i].from, reinsert_segs[i].to);
     }
 }
 
 void SpatialGrid::remove(Node* from, Node* to)
 {
+    if (!root) return;
+
     Segment seg{from, to};
+    AABB box = AABB::from_segment(from, to);
 
-    int c0, r0, c1, r1;
-    get_cells(from->x, from->y, to->x, to->y, c0, r0, c1, r1);
+    std::vector<RTreeNode*> path;
+    RTreeNode* leaf = find_leaf(root, seg, box, path);
 
-    for (int r = r0; r <= r1; r++) {
-        for (int c = c0; c <= c1; c++) {
-            cells[r * cols + c].erase(seg);
+    if (!leaf) return;
+
+    // Remove the entry from the leaf
+    for (size_t i = 0; i < leaf->entries.size(); i++) {
+        if (leaf->entries[i] == seg) {
+            leaf->entries.erase(leaf->entries.begin() + i);
+            leaf->entry_boxes.erase(leaf->entry_boxes.begin() + i);
+            leaf->recompute_bbox();
+            break;
+        }
+    }
+
+    // Condense tree
+    path.push_back(leaf); // not actually used this way -- condense from parent
+    // Actually, condense needs the path from root to leaf's parent
+    // path already has root-to-parent, let's use it
+    path.pop_back(); // remove leaf itself
+
+    // Recompute bboxes and handle underflow
+    if (!path.empty()) {
+        condense_tree(path);
+    }
+
+    // Handle root with no children
+    if (root && !root->is_leaf && root->children.empty()) {
+        delete root;
+        root = new RTreeNode(true);
+    }
+}
+
+void SpatialGrid::query_recursive(RTreeNode* node, const AABB& query_box,
+                                  std::vector<Segment>& result,
+                                  const std::unordered_set<Segment, SegmentHash>& exclude) const
+{
+    if (!node->bbox.overlaps(query_box)) return;
+
+    if (node->is_leaf) {
+        for (size_t i = 0; i < node->entries.size(); i++) {
+            if (node->entry_boxes[i].overlaps(query_box)) {
+                if (exclude.count(node->entries[i]) == 0) {
+                    result.push_back(node->entries[i]);
+                }
+            }
+        }
+    } else {
+        for (auto* child : node->children) {
+            query_recursive(child, query_box, result, exclude);
         }
     }
 }
@@ -109,20 +469,8 @@ void SpatialGrid::query(double qx1, double qy1, double qx2, double qy2,
                         const std::unordered_set<Segment, SegmentHash>& exclude) const
 {
     result.clear();
+    if (!root) return;
 
-    int c0, r0, c1, r1;
-    get_cells(qx1, qy1, qx2, qy2, c0, r0, c1, r1);
-
-    // Use a set to deduplicate (segments span multiple cells)
-    std::unordered_set<Segment, SegmentHash> seen;
-
-    for (int r = r0; r <= r1; r++) {
-        for (int c = c0; c <= c1; c++) {
-            for (const auto& seg : cells[r * cols + c]) {
-                if (exclude.count(seg) == 0 && seen.insert(seg).second) {
-                    result.push_back(seg);
-                }
-            }
-        }
-    }
+    AABB query_box(qx1, qy1, qx2, qy2);
+    query_recursive(root, query_box, result, exclude);
 }
