@@ -68,5 +68,11 @@ vcpkg_installed/
 Testing/
 .cache/
 
+# cache for apps
+.claude/
+.vs/
+.vscode/
+.idea/
+
 # the executable
 simplify
