@@ -114,7 +114,8 @@ double compute_signed_area(const Ring& ring)
 	return area / 2.0;
 }
 
-void print_output(const std::vector<Ring>& rings, double input_area, double output_area, double displacement)
+void print_output(const std::vector<Ring>& rings, double input_area, double output_area, double displacement,
+                  double offset_x, double offset_y)
 {
 	std::printf("ring_id,vertex_id,x,y\n");
 
@@ -123,7 +124,8 @@ void print_output(const std::vector<Ring>& rings, double input_area, double outp
 		int vid = 0;
 
 		do {
-			std::printf("%d,%d,%.15g,%.15g\n", ring.ring_id, vid, current->x, current->y);
+			std::printf("%d,%d,%.15g,%.15g\n", ring.ring_id, vid,
+			            current->x + offset_x, current->y + offset_y);
 			vid++;
 			current = current->next;
 		} while (current != ring.vertices.head);

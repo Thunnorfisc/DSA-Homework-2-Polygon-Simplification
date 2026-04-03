@@ -32,4 +32,5 @@ struct Ring {
 
 std::vector<Ring> parse_csv(const std::string& filename);
 double compute_signed_area(const Ring& ring);
-void print_output(const std::vector<Ring>& rings, double input_area, double output_area, double displacement);
+void print_output(const std::vector<Ring>& rings, double input_area, double output_area, double displacement,
+                  double offset_x = 0.0, double offset_y = 0.0);
