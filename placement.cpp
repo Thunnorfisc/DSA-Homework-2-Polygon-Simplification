@@ -1,3 +1,10 @@
+/**
+ * @name    placement.cpp
+ * @group   T3 Group 07
+ * @course  CSD2183 (Data Structures)
+ * @brief   Computes area-preserving Steiner point placement for vertex-pair collapse operations.
+ */
+
 #include "placement.h"
 #include <cmath>
 #include <array>
@@ -77,6 +84,11 @@ static double quadrilateral_displacement(double p0x, double p0y,
     return std::abs(area2) * 0.5;
 }
 
+/**
+ * @name  compute_candidate
+ * @brief Finds the optimal Steiner point E to replace vertices B and C in A->B->C->D,
+ *        preserving the signed area of the quadrilateral ABCD while minimizing areal displacement.
+ */
 bool compute_candidate(Node* A, Node* B, Node* C, Node* D, CollapseCandidate& out)
 {
     out.A = A;

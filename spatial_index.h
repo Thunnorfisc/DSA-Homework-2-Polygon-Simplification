@@ -1,10 +1,20 @@
+/**
+ * @name    spatial_index.h
+ * @group   T3 Group 07
+ * @course  CSD2183 (Data Structures)
+ * @brief   R-tree spatial index for efficient segment intersection queries during polygon simplification.
+ */
+
 #pragma once
 #include "polygon.h"
 #include <vector>
 #include <unordered_set>
 #include <functional>
 
-// A segment in the spatial index, defined by two node endpoints
+/**
+ * @name  Segment
+ * @brief A directed line segment defined by two Node endpoint pointers.
+ */
 struct Segment {
     Node* from;
     Node* to;
@@ -14,6 +24,10 @@ struct Segment {
     }
 };
 
+/**
+ * @name  SegmentHash
+ * @brief Hash functor for Segment, enabling use in unordered containers.
+ */
 struct SegmentHash {
     size_t operator()(const Segment& s) const {
         auto h1 = std::hash<Node*>{}(s.from);
@@ -22,7 +36,10 @@ struct SegmentHash {
     }
 };
 
-// Axis-aligned bounding box
+/**
+ * @name  AABB
+ * @brief Axis-aligned bounding box used for spatial queries and R-tree node bounds.
+ */
 struct AABB {
     double min_x, min_y, max_x, max_y;
 
@@ -37,7 +54,10 @@ struct AABB {
     static AABB from_segment(Node* a, Node* b);
 };
 
-// R-tree node
+/**
+ * @name  RTreeNode
+ * @brief A node in the R-tree; stores either child node pointers (internal) or segment entries (leaf).
+ */
 struct RTreeNode {
     static constexpr int MAX_ENTRIES = 16;
     static constexpr int MIN_ENTRIES = 4;  // must be <= MAX_ENTRIES/2
@@ -59,7 +79,16 @@ struct RTreeNode {
     void recompute_bbox();
 };
 
-class SpatialGrid {  // keeping the name for interface compatibility
+/**
+ * @name       SpatialGrid
+ * @brief      R-tree based spatial index for polygon segments, supporting dynamic insert/remove and range queries.
+ * @operations
+ *   - build:  Bulk-insert all segments from all rings — O(V log V) time, O(V) space.
+ *   - insert: Insert a single segment into the R-tree — O(log V) time, O(1) space.
+ *   - remove: Remove a single segment from the R-tree — O(V) worst case due to reinsertion, O(log V) typical.
+ *   - query:  Find all segments whose bounding box overlaps a query rectangle — O(sqrt(V) + k) typical time.
+ */
+class SpatialGrid {
 private:
     RTreeNode* root;
 

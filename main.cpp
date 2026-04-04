@@ -1,3 +1,11 @@
+/**
+ * @name    main.cpp
+ * @group   T3 Group 07
+ * @course  CSD2183 (Data Structures)
+ * @brief   Entry point for the polygon simplification program. Orchestrates CSV parsing,
+ *          coordinate normalization, simplification, post-processing, and output.
+ */
+
 #include <iostream>
 #include <fstream>
 #include <vector>
@@ -13,7 +21,10 @@
 
 using Pt = std::pair<double, double>;
 
-// Extract vertices from a ring into a vector of (x,y) pairs
+/**
+ * @name  extract_vertices
+ * @brief Extracts all vertices from a ring's circular linked list into a vector of (x,y) pairs.
+ */
 static std::vector<Pt> extract_vertices(const Ring& ring)
 {
     std::vector<Pt> verts;
@@ -28,7 +39,10 @@ static std::vector<Pt> extract_vertices(const Ring& ring)
     return verts;
 }
 
-// Compute bounding box centroid of all rings
+/**
+ * @name  compute_centroid
+ * @brief Computes the center of the bounding box of all ring vertices for coordinate normalization.
+ */
 static void compute_centroid(const std::vector<Ring>& rings, double& cx, double& cy)
 {
     double min_x =  std::numeric_limits<double>::max();
@@ -52,7 +66,10 @@ static void compute_centroid(const std::vector<Ring>& rings, double& cx, double&
     cy = (min_y + max_y) / 2.0;
 }
 
-// Shift all vertices by (-dx, -dy)
+/**
+ * @name  shift_all_vertices
+ * @brief Translates all vertices by (-dx, -dy) to center coordinates at the origin.
+ */
 static void shift_all_vertices(std::vector<Ring>& rings, double dx, double dy)
 {
     for (auto& ring : rings) {

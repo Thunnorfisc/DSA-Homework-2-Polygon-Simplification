@@ -1,3 +1,11 @@
+/**
+ * @name    simplify.cpp
+ * @group   T3 Group 07
+ * @course  CSD2183 (Data Structures)
+ * @brief   Greedy polygon simplification loop: collapses lowest-cost vertex pairs while
+ *          maintaining topology via spatial index intersection checks.
+ */
+
 #include "simplify.h"
 #include "heap.h"
 #include "topology.h"
@@ -7,6 +15,10 @@
 
 static uint64_t g_serial = 0;
 
+/**
+ * @name  push_candidate_from
+ * @brief Computes and pushes a collapse candidate starting at vertex A (for A->B->C->D) into the heap.
+ */
 static void push_candidate_from(Node* A, int ring_size, MinHeap& heap)
 {
     if (!A || A->deleted) return;
@@ -25,6 +37,11 @@ static void push_candidate_from(Node* A, int ring_size, MinHeap& heap)
     }
 }
 
+/**
+ * @name  simplify_polygon
+ * @brief Main simplification loop: greedily collapses the cheapest vertex pair, updates the spatial
+ *        index, and regenerates affected candidates until the target vertex count is reached.
+ */
 double simplify_polygon(std::vector<Ring>& rings, int target_vertices)
 {
     int total_vertices = 0;

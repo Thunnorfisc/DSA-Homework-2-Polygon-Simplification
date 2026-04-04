@@ -1,3 +1,11 @@
+/**
+ * @name    post_process.cpp
+ * @group   T3 Group 07
+ * @course  CSD2183 (Data Structures)
+ * @brief   Post-processing implementation: collinear vertex removal, vertex sliding optimization,
+ *          inter-ring intersection prevention, and orientation verification.
+ */
+
 #include "post_process.h"
 #include <cmath>
 #include <algorithm>
@@ -29,7 +37,11 @@ static double ring_signed_area_from_node(Node* head)
     return area2 / 2.0;
 }
 
-// Check if moving V to (nx,ny) causes intersection with ANY ring
+/**
+ * @name  causes_intersection
+ * @brief Checks if relocating vertex V to (nx,ny) would cause its new edges to intersect
+ *        any segment in any ring, preventing topology violations.
+ */
 static bool causes_intersection(Node* V, double nx, double ny,
                                 const std::vector<Ring>& all_rings)
 {
@@ -90,6 +102,10 @@ static bool causes_intersection(Node* V, double nx, double ny,
     return false;
 }
 
+/**
+ * @name  remove_collinear
+ * @brief Removes vertices that are collinear with their neighbors (zero area contribution).
+ */
 static int remove_collinear(Ring& ring)
 {
     if (ring.vertices.size <= 3) return 0;
@@ -118,6 +134,12 @@ static int remove_collinear(Ring& ring)
     return removed;
 }
 
+/**
+ * @name  post_process
+ * @brief Refines simplified polygons over multiple iterations by sliding each vertex along
+ *        the line connecting its neighbors to minimize symmetric difference with the original.
+ *        Validates orientation preservation and inter-ring topology at each step.
+ */
 int post_process(std::vector<Ring>& rings,
                  const std::vector<std::vector<Pt>>& original_vertices,
                  int max_iterations)

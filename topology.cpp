@@ -1,7 +1,19 @@
+/**
+ * @name    topology.cpp
+ * @group   T3 Group 07
+ * @course  CSD2183 (Data Structures)
+ * @brief   Segment intersection tests and collapse validation against the spatial index.
+ */
+
 #include "topology.h"
 #include <cmath>
 #include <algorithm>
 
+/**
+ * @name  segments_intersect
+ * @brief Tests if segments (p1,p2) and (p3,p4) intersect using cross-product orientation tests
+ *        with collinear endpoint overlap detection.
+ */
 bool segments_intersect(double p1x, double p1y, double p2x, double p2y,
                         double p3x, double p3y, double p4x, double p4y)
 {
@@ -71,6 +83,11 @@ static bool check_segment_against_grid(double sx, double sy, double tx, double t
     return false;
 }
 
+/**
+ * @name  collapse_causes_intersection
+ * @brief Queries the R-tree for nearby segments and checks if new edges A->E or E->D
+ *        would cross any existing edge, excluding the three edges being removed.
+ */
 bool collapse_causes_intersection(Node* A, double ex, double ey, Node* D,
                                   Node* B, Node* C,
                                   const SpatialGrid& grid)

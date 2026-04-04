@@ -1,3 +1,10 @@
+/**
+ * @name    spatial_index.cpp
+ * @group   T3 Group 07
+ * @course  CSD2183 (Data Structures)
+ * @brief   R-tree implementation with quadratic split for spatial indexing of polygon segments.
+ */
+
 #include "spatial_index.h"
 #include <algorithm>
 #include <cmath>
@@ -5,6 +12,10 @@
 
 // ── AABB ──
 
+/**
+ * @name  AABB::AABB
+ * @brief Constructs an AABB from two corner points, auto-sorting min/max.
+ */
 AABB::AABB(double x1, double y1, double x2, double y2)
 {
     min_x = std::min(x1, x2);
@@ -13,12 +24,20 @@ AABB::AABB(double x1, double y1, double x2, double y2)
     max_y = std::max(y1, y2);
 }
 
+/**
+ * @name  AABB::area
+ * @brief Returns the area of the bounding box.
+ */
 double AABB::area() const
 {
     if (max_x < min_x || max_y < min_y) return 0.0;
     return (max_x - min_x) * (max_y - min_y);
 }
 
+/**
+ * @name  AABB::enlargement
+ * @brief Computes how much this AABB's area would increase if expanded to include another AABB.
+ */
 double AABB::enlargement(const AABB& other) const
 {
     double new_min_x = std::min(min_x, other.min_x);
@@ -29,6 +48,10 @@ double AABB::enlargement(const AABB& other) const
     return new_area - area();
 }
 
+/**
+ * @name  AABB::expand
+ * @brief Expands this AABB in-place to encompass another AABB.
+ */
 void AABB::expand(const AABB& other)
 {
     min_x = std::min(min_x, other.min_x);
@@ -37,12 +60,20 @@ void AABB::expand(const AABB& other)
     max_y = std::max(max_y, other.max_y);
 }
 
+/**
+ * @name  AABB::overlaps
+ * @brief Returns true if this AABB overlaps with another AABB.
+ */
 bool AABB::overlaps(const AABB& other) const
 {
     return !(max_x < other.min_x || min_x > other.max_x ||
              max_y < other.min_y || min_y > other.max_y);
 }
 
+/**
+ * @name  AABB::from_segment
+ * @brief Creates an AABB that tightly bounds the segment between two nodes.
+ */
 AABB AABB::from_segment(Node* a, Node* b)
 {
     return AABB(a->x, a->y, b->x, b->y);
@@ -59,6 +90,10 @@ RTreeNode::~RTreeNode()
     }
 }
 
+/**
+ * @name  RTreeNode::recompute_bbox
+ * @brief Recalculates this node's bounding box from its children or entries.
+ */
 void RTreeNode::recompute_bbox()
 {
     bbox = AABB(); // reset to empty
@@ -80,6 +115,10 @@ SpatialGrid::~SpatialGrid()
     delete root;
 }
 
+/**
+ * @name  SpatialGrid::build
+ * @brief Builds the R-tree by inserting all segments from all polygon rings.
+ */
 void SpatialGrid::build(const std::vector<Ring>& rings)
 {
     delete root;
@@ -95,6 +134,10 @@ void SpatialGrid::build(const std::vector<Ring>& rings)
     }
 }
 
+/**
+ * @name  SpatialGrid::choose_leaf
+ * @brief Traverses the tree to find the leaf node whose bounding box needs least enlargement to fit the given box.
+ */
 RTreeNode* SpatialGrid::choose_leaf(RTreeNode* node, const AABB& box)
 {
     if (node->is_leaf) return node;
@@ -117,8 +160,13 @@ RTreeNode* SpatialGrid::choose_leaf(RTreeNode* node, const AABB& box)
     return choose_leaf(best, box);
 }
 
-// Quadratic split: pick two seeds that waste the most area, then assign
-// remaining entries to the group whose bbox grows least
+/**
+ * @name             SpatialGrid::split_node
+ * @brief            Splits an overflowing R-tree node using the quadratic split algorithm.
+ *                   Picks two seed entries that waste the most area when combined, then assigns
+ *                   remaining entries to the group whose bounding box grows least.
+ * @time_complexity  O(n^2) where n is the number of entries in the node.
+ */
 RTreeNode* SpatialGrid::split_node(RTreeNode* node)
 {
     RTreeNode* new_node = new RTreeNode(node->is_leaf);
@@ -258,6 +306,10 @@ RTreeNode* SpatialGrid::split_node(RTreeNode* node)
     return new_node;
 }
 
+/**
+ * @name  SpatialGrid::handle_overflow
+ * @brief Splits an overflowing node and propagates the split upward, creating a new root if needed.
+ */
 void SpatialGrid::handle_overflow(RTreeNode* node, std::vector<RTreeNode*>& path)
 {
     RTreeNode* new_node = split_node(node);
@@ -282,6 +334,11 @@ void SpatialGrid::handle_overflow(RTreeNode* node, std::vector<RTreeNode*>& path
     }
 }
 
+/**
+ * @name             SpatialGrid::insert
+ * @brief            Inserts a segment into the R-tree, splitting nodes as needed on overflow.
+ * @time_complexity  O(log V) amortized.
+ */
 void SpatialGrid::insert(Node* from, Node* to)
 {
     AABB box = AABB::from_segment(from, to);
@@ -328,6 +385,10 @@ void SpatialGrid::insert(Node* from, Node* to)
     }
 }
 
+/**
+ * @name  SpatialGrid::find_leaf
+ * @brief Recursively searches the R-tree for the leaf node containing a specific segment.
+ */
 RTreeNode* SpatialGrid::find_leaf(RTreeNode* node, const Segment& seg, const AABB& box,
                                   std::vector<RTreeNode*>& path)
 {
@@ -351,6 +412,11 @@ RTreeNode* SpatialGrid::find_leaf(RTreeNode* node, const Segment& seg, const AAB
     return nullptr;
 }
 
+/**
+ * @name  SpatialGrid::condense_tree
+ * @brief Rebalances the R-tree after removal by eliminating empty nodes and reinserting entries
+ *        from underflowing leaf nodes.
+ */
 void SpatialGrid::condense_tree(std::vector<RTreeNode*>& path)
 {
     // Collect entries from underflowing nodes to reinsert
@@ -403,6 +469,10 @@ void SpatialGrid::condense_tree(std::vector<RTreeNode*>& path)
     }
 }
 
+/**
+ * @name  SpatialGrid::remove
+ * @brief Removes a segment from the R-tree and condenses the tree to maintain balance.
+ */
 void SpatialGrid::remove(Node* from, Node* to)
 {
     if (!root) return;
@@ -464,6 +534,11 @@ void SpatialGrid::query_recursive(RTreeNode* node, const AABB& query_box,
     }
 }
 
+/**
+ * @name  SpatialGrid::query
+ * @brief Returns all segments whose bounding box overlaps the given query rectangle,
+ *        excluding segments in the exclude set.
+ */
 void SpatialGrid::query(double qx1, double qy1, double qx2, double qy2,
                         std::vector<Segment>& result,
                         const std::unordered_set<Segment, SegmentHash>& exclude) const

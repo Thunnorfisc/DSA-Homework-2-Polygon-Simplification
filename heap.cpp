@@ -1,8 +1,19 @@
+/**
+ * @name    heap.cpp
+ * @group   T3 Group 07
+ * @course  CSD2183 (Data Structures)
+ * @brief   Implementation of the MinHeap priority queue for collapse candidates.
+ */
+
 #include "heap.h"
 #include <stdexcept>
 #include <utility>
 #include <cmath>
 
+/**
+ * @name  MinHeap::higher_priority
+ * @brief Returns true if candidate a should be processed before b (lower displacement wins, serial breaks ties).
+ */
 bool MinHeap::higher_priority(const CollapseCandidate& a, const CollapseCandidate& b)
 {
     double diff = a.displacement - b.displacement;
@@ -11,6 +22,10 @@ bool MinHeap::higher_priority(const CollapseCandidate& a, const CollapseCandidat
     return a.serial < b.serial;       // tie-break: earlier serial wins
 }
 
+/**
+ * @name  MinHeap::sift_up
+ * @brief Restores heap order by bubbling element at index i upward.
+ */
 void MinHeap::sift_up(int i)
 {
     while (i > 0) {
@@ -24,6 +39,10 @@ void MinHeap::sift_up(int i)
     }
 }
 
+/**
+ * @name  MinHeap::sift_down
+ * @brief Restores heap order by sinking element at index i downward.
+ */
 void MinHeap::sift_down(int i)
 {
     int n = static_cast<int>(data.size());
@@ -49,12 +68,20 @@ void MinHeap::sift_down(int i)
     }
 }
 
+/**
+ * @name  MinHeap::push
+ * @brief Inserts a collapse candidate into the heap and restores heap order.
+ */
 void MinHeap::push(const CollapseCandidate& cand)
 {
     data.push_back(cand);
     sift_up(static_cast<int>(data.size()) - 1);
 }
 
+/**
+ * @name  MinHeap::pop
+ * @brief Removes and returns the candidate with the smallest displacement cost.
+ */
 CollapseCandidate MinHeap::pop()
 {
     if (data.empty()) {
@@ -72,6 +99,10 @@ CollapseCandidate MinHeap::pop()
     return result;
 }
 
+/**
+ * @name  MinHeap::top
+ * @brief Returns a reference to the candidate with the smallest displacement cost without removing it.
+ */
 const CollapseCandidate& MinHeap::top() const
 {
     if (data.empty()) {

@@ -1,3 +1,11 @@
+/**
+ * @name    symmetric_diff.cpp
+ * @group   T3 Group 07
+ * @course  CSD2183 (Data Structures)
+ * @brief   Symmetric difference area computation using fan-triangulation with
+ *          Sutherland-Hodgman polygon clipping for intersection area calculation.
+ */
+
 #include "symmetric_diff.h"
 #include <cmath>
 #include <algorithm>
@@ -44,8 +52,10 @@ static Pt line_intersect(const Pt& p1, const Pt& p2, const Pt& a, const Pt& b)
     return {(c1 * b2 - c2 * b1) / det, (a1 * c2 - a2 * c1) / det};
 }
 
-// Sutherland-Hodgman: clip 'subject' polygon against convex 'clip' polygon
-// clip must be CCW
+/**
+ * @name  sh_clip
+ * @brief Clips a subject polygon against a convex clip polygon using the Sutherland-Hodgman algorithm.
+ */
 static std::vector<Pt> sh_clip(const std::vector<Pt>& subject, const std::vector<Pt>& clip)
 {
     if (subject.empty() || clip.empty()) return {};
@@ -85,6 +95,11 @@ static std::vector<Pt> sh_clip(const std::vector<Pt>& subject, const std::vector
     return output;
 }
 
+/**
+ * @name  compute_symmetric_difference
+ * @brief Computes symmetric difference = area(P) + area(Q) - 2*area(P intersect Q) by
+ *        fan-triangulating P and clipping Q against each triangle.
+ */
 double compute_symmetric_difference(
     const std::vector<Pt>& P,
     const std::vector<Pt>& Q)

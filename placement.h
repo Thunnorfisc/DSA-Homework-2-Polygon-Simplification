@@ -1,7 +1,19 @@
+/**
+ * @name    placement.h
+ * @group   T3 Group 07
+ * @course  CSD2183 (Data Structures)
+ * @brief   Steiner point placement for area-preserving two-vertex collapse operations.
+ */
+
 #pragma once
 #include "polygon.h"
 #include <cstdint>
 
+/**
+ * @name  CollapseCandidate
+ * @brief Represents a candidate collapse of two consecutive vertices B,C into a single Steiner point E,
+ *        storing the surrounding context vertices A,D and the resulting areal displacement cost.
+ */
 struct CollapseCandidate {
     Node* A;
     Node* B;  // will be removed
@@ -22,6 +34,10 @@ struct CollapseCandidate {
     }
 };
 
+/**
+ * @name  CompareCandidates
+ * @brief Comparator for CollapseCandidate ordering: lower displacement has higher priority, serial breaks ties.
+ */
 struct CompareCandidates {
     bool operator()(const CollapseCandidate& a, const CollapseCandidate& b) const {
         // Compare by displacement first, then by serial for tie-breaking
@@ -32,7 +48,10 @@ struct CompareCandidates {
     }
 };
 
-// Compute the best candidate collapse for A→B→C→D
-// Tries both AB and CD intersections, picks the one with lower displacement
-// Returns false if no valid placement exists
+/**
+ * @name  compute_candidate
+ * @brief Computes the best area-preserving Steiner point for collapsing B,C in sequence A->B->C->D.
+ *        Tries placement on both ray A->B and ray D->C, picks the one with lower displacement.
+ *        Returns false if no valid placement exists.
+ */
 bool compute_candidate(Node* A, Node* B, Node* C, Node* D, CollapseCandidate& out);

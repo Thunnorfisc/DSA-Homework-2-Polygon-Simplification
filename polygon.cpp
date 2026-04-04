@@ -1,3 +1,10 @@
+/**
+ * @name    polygon.cpp
+ * @group   T3 Group 07
+ * @course  CSD2183 (Data Structures)
+ * @brief   Implementation of polygon data structures, CSV parsing, area computation, and output formatting.
+ */
+
 #include "polygon.h"
 #include <iostream>
 #include <fstream>
@@ -5,6 +12,10 @@
 #include <sstream>
 #include <algorithm>
 
+/**
+ * @name  CircularDoublyLinkedList::append
+ * @brief Allocates a new node and inserts it at the tail of the circular list.
+ */
 Node* CircularDoublyLinkedList::append(double x, double y, int ring_id)
 {
 	Node* node = new Node{ x, y, ring_id, nullptr, nullptr, 0, false };
@@ -26,6 +37,10 @@ Node* CircularDoublyLinkedList::append(double x, double y, int ring_id)
 	return node;
 }
 
+/**
+ * @name  CircularDoublyLinkedList::remove
+ * @brief Unlinks a node from the list and marks it as deleted.
+ */
 void CircularDoublyLinkedList::remove(Node* node)
 {
 	if (size <= 1) return;
@@ -39,6 +54,10 @@ void CircularDoublyLinkedList::remove(Node* node)
 	size--;
 }
 
+/**
+ * @name  CircularDoublyLinkedList::insert_after
+ * @brief Allocates a new node and inserts it immediately after the given node.
+ */
 Node* CircularDoublyLinkedList::insert_after(Node* after, double x, double y, int ring_id)
 {
 	Node* node = new Node{ x, y, ring_id, after, after->next, 0, false };
@@ -48,6 +67,11 @@ Node* CircularDoublyLinkedList::insert_after(Node* after, double x, double y, in
 	return node;
 }
 
+/**
+ * @name            parse_csv
+ * @brief           Reads a CSV file and constructs Ring objects with vertices sorted by vertex_id.
+ * @time_complexity O(V log V) where V is the total number of vertices, due to per-ring sorting.
+ */
 std::vector<Ring> parse_csv(const std::string& filename)
 {
 	std::ifstream file(filename);
@@ -98,6 +122,10 @@ std::vector<Ring> parse_csv(const std::string& filename)
 	return rings;
 }
 
+/**
+ * @name  compute_signed_area
+ * @brief Computes the signed area of a ring using the shoelace formula. Positive for CCW, negative for CW.
+ */
 double compute_signed_area(const Ring& ring)
 {
 	if (ring.vertices.size < 3) return 0.0;
@@ -114,6 +142,10 @@ double compute_signed_area(const Ring& ring)
 	return area / 2.0;
 }
 
+/**
+ * @name  print_output
+ * @brief Writes simplified polygon CSV to stdout and appends area/displacement summary lines.
+ */
 void print_output(const std::vector<Ring>& rings, double input_area, double output_area, double displacement,
                   double offset_x, double offset_y)
 {
